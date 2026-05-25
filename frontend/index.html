@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Traffic Surveillance System — Live Demo</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0e14;--bg2:#0f1520;--bg3:#131c2a;--card:#111827;
+  --green:#00c896;--green2:#00a878;--cyan:#22d3ee;--amber:#f59e0b;
+  --red:#ef4444;--blue:#3b82f6;--purple:#a855f7;--orange:#f97316;
+  --border:rgba(0,200,150,0.12);--border2:rgba(0,200,150,0.22);
+  --text:#e2e8f0;--muted:#64748b;--muted2:#94a3b8;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;min-height:100vh;overflow-x:hidden}
+
+/* ── Header ── */
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border2);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.brand{display:flex;align-items:center;gap:10px}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,200,150,.4)}50%{opacity:.7;box-shadow:0 0 0 6px rgba(0,200,150,0)}}
+.brand-name{font-size:14px;font-weight:700;color:var(--green);letter-spacing:.06em;text-transform:uppercase}
+.brand-sub{font-size:10px;color:var(--muted)}
+.topstats{display:flex;gap:24px}
+.ts{text-align:center}
+.ts-val{font-size:18px;font-weight:700;color:var(--cyan)}
+.ts-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.live-badge{display:flex;align-items:center;gap:6px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:20px;padding:4px 12px;font-size:11px;color:var(--red);font-weight:600}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--red);animation:pulse 1s infinite}
+
+/* ── Layout ── */
+.layout{display:grid;grid-template-columns:1fr 300px;gap:12px;padding:12px;min-height:calc(100vh - 55px)}
+.left{display:flex;flex-direction:column;gap:12px}
+.right{display:flex;flex-direction:column;gap:12px}
+
+/* ── Stat row ── */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.stat-val{font-size:22px;font-weight:700;color:var(--cyan)}
+.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+.stat-delta{font-size:10px;margin-top:3px}
+.up{color:var(--green)}.dn{color:var(--red)}.am{color:var(--amber)}
+
+/* ── Camera grid ── */
+.cam-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cam{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer;transition:border-color .2s}
+.cam:hover,.cam.active{border-color:var(--green)}
+.cam-view{position:relative;height:108px;background:#050a10;overflow:hidden}
+.cam-canvas{width:100%;height:100%;display:block}
+.cam-top{position:absolute;top:4px;left:4px;display:flex;gap:4px}
+.cam-tag{background:rgba(0,0,0,.7);border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-size:9px;color:var(--cyan)}
+.cam-rec{background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.4);color:var(--red);display:flex;align-items:center;gap:3px;font-size:9px;border-radius:3px;padding:1px 5px}
+.cam-rdot{width:4px;height:4px;border-radius:50%;background:var(--red);animation:pulse 1s infinite}
+.cam-bot{padding:5px 8px;display:flex;justify-content:space-between;align-items:center}
+.cam-name{font-size:11px;font-weight:600;color:var(--text)}
+.cam-loc{font-size:9px;color:var(--muted)}
+.cam-cnt{font-size:11px;color:var(--green);font-weight:600}
+
+/* ── Charts row ── */
+.charts-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.ch{padding:8px 12px;border-bottom:1px solid var(--border);font-size:10px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:.1em}
+.chart-body{padding:10px 12px}
+
+/* bar chart */
+.bars{display:flex;align-items:flex-end;gap:2px;height:56px}
+.bar{flex:1;border-radius:2px 2px 0 0;min-height:3px;background:var(--green2);opacity:.7;transition:height .5s}
+.bar.now{background:var(--cyan);opacity:1}
+
+/* donut */
+.donut-wrap{display:flex;align-items:center;gap:10px}
+.donut-leg{flex:1}
+.leg-row{display:flex;align-items:center;gap:5px;margin-bottom:4px}
+.leg-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.leg-lbl{font-size:10px;color:var(--muted);flex:1}
+.leg-pct{font-size:10px;color:var(--text)}
+
+/* speed bands */
+.spd-row{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.spd-lbl{font-size:9px;color:var(--muted);width:52px}
+.spd-track{flex:1;height:5px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden}
+.spd-fill{height:100%;border-radius:3px;transition:width .5s}
+.spd-num{font-size:9px;color:var(--text);width:22px;text-align:right}
+
+/* ── Right panels ── */
+.panel{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.ph{padding:8px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:rgba(0,200,150,.03)}
+.ph-title{font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.1em}
+.ph-count{font-size:9px;color:var(--muted)}
+
+/* ANPR rows */
+.anpr-header{display:grid;grid-template-columns:88px 1fr 40px;gap:6px;padding:4px 12px;border-bottom:1px solid var(--border)}
+.anpr-list{max-height:180px;overflow-y:auto}
+.anpr-list::-webkit-scrollbar{width:3px}
+.anpr-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.anpr-row{display:grid;grid-template-columns:88px 1fr 40px;gap:6px;padding:5px 12px;border-bottom:1px solid rgba(0,200,150,.05);align-items:center;animation:slideIn .3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
+.plate{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:3px;padding:2px 5px;font-size:10px;font-weight:700;color:var(--amber);text-align:center;letter-spacing:.05em}
+.plate.alert{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.35);color:var(--red)}
+.vtype{font-size:10px;color:var(--muted)}
+.conf-mini{font-size:9px;color:var(--green)}
+
+/* Alert list */
+.alert-list{max-height:160px;overflow-y:auto}
+.alert-item{display:flex;align-items:flex-start;gap:8px;padding:7px 12px;border-bottom:1px solid rgba(0,200,150,.05);animation:slideIn .3s ease}
+.alert-ico{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;margin-top:1px}
+.ico-warn{background:rgba(245,158,11,.15);color:var(--amber)}
+.ico-danger{background:rgba(239,68,68,.15);color:var(--red)}
+.ico-info{background:rgba(59,130,246,.15);color:var(--blue)}
+.alert-msg{font-size:11px;color:var(--text);flex:1;line-height:1.5}
+.alert-time{font-size:9px;color:var(--muted);white-space:nowrap}
+
+/* AI insight */
+.insight-box{padding:10px 12px;font-size:11px;color:var(--muted2);line-height:1.7;border-top:1px solid var(--border)}
+.insight-tag{font-size:9px;font-weight:700;color:var(--green);letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+
+/* Video upload section */
+.upload-section{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.upload-area{border:1.5px dashed var(--border2);border-radius:6px;margin:12px;padding:20px;text-align:center;cursor:pointer;transition:border-color .2s}
+.upload-area:hover,.upload-area.drag{border-color:var(--green);background:rgba(0,200,150,.04)}
+.upload-icon{font-size:28px;color:var(--green);margin-bottom:8px}
+.upload-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px}
+.upload-sub{font-size:11px;color:var(--muted)}
+.upload-input{display:none}
+
+/* Progress bar */
+.prog-wrap{margin:0 12px 12px;display:none}
+.prog-lbl{font-size:11px;color:var(--muted);margin-bottom:5px;display:flex;justify-content:space-between}
+.prog-track{height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden}
+.prog-fill{height:100%;border-radius:3px;background:var(--green);transition:width .3s}
+
+/* Report cards */
+.report-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 12px 12px}
+.report-card{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px 10px}
+.rc-val{font-size:18px;font-weight:700;color:var(--cyan)}
+.rc-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+
+/* ANPR result list */
+.anpr-result{margin:0 12px 12px;max-height:120px;overflow-y:auto;display:none}
+.ar-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)}
+.ar-plate{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:3px;padding:1px 7px;font-size:11px;font-weight:700;color:var(--amber)}
+.ar-type{font-size:10px;color:var(--muted);flex:1}
+.ar-time{font-size:9px;color:var(--muted)}
+.ar-badge{font-size:9px;padding:1px 6px;border-radius:10px;background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:.2s}
+.btn-primary{background:var(--green);color:#000}
+.btn-primary:hover{background:var(--green2)}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn-ghost{background:transparent;color:var(--green);border:1px solid var(--border2)}
+.btn-ghost:hover{background:rgba(0,200,150,.08)}
+
+/* Tabs */
+.tab-row{display:flex;gap:0;border-bottom:1px solid var(--border)}
+.tab{padding:8px 16px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:.2s}
+.tab.active{color:var(--green);border-bottom-color:var(--green)}
+
+/* Violation badge */
+.v-badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;padding:1px 7px;border-radius:10px;background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.25);font-weight:600}
+
+/* Footer watermark */
+.footer{text-align:center;padding:10px;font-size:10px;color:var(--muted);border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="brand">
+    <div class="pulse"></div>
+    <div>
+      <div class="brand-name">AI Traffic Surveillance & Analytics</div>
+      <div class="brand-sub">Real-time · YOLOv8 Detection · ANPR · Speed Estimation · Smart Alerts</div>
+    </div>
+  </div>
+  <div class="topstats">
+    <div class="ts"><div class="ts-val" id="hv1">8,421</div><div class="ts-lbl">Vehicles Today</div></div>
+    <div class="ts"><div class="ts-val" id="hv2">58</div><div class="ts-lbl">Avg Speed km/h</div></div>
+    <div class="ts"><div class="ts-val" id="hv3">14</div><div class="ts-lbl">Violations</div></div>
+    <div class="ts"><div class="ts-val" style="color:var(--green)">6/6</div><div class="ts-lbl">Cameras Online</div></div>
+  </div>
+  <div class="live-badge"><div class="live-rdot live-dot"></div>LIVE</div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+<div class="left">
+
+  <!-- STAT ROW -->
+  <div class="stat-row">
+    <div class="stat">
+      <div class="stat-val" id="s1">362</div>
+      <div class="stat-lbl">Traffic Flow / hr</div>
+      <div class="stat-delta up" id="d1">↑ +12% vs yesterday</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="s2">3,847</div>
+      <div class="stat-lbl">ANPR Reads</div>
+      <div class="stat-delta up">↑ 98.2% accuracy</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" id="s3" style="color:var(--red)">14</div>
+      <div class="stat-lbl">Speed Violations</div>
+      <div class="stat-delta dn">↑ +2 since 9 AM</div>
+    </div>
+    <div class="stat">
+      <div class="stat-val" style="color:var(--amber)" id="s4">Med</div>
+      <div class="stat-lbl">Congestion Level</div>
+      <div class="stat-delta am">▲ Moderate flow</div>
+    </div>
+  </div>
+
+  <!-- CAMERAS -->
+  <div>
+    <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">Live Camera Feeds</div>
+    <div class="cam-grid" id="cam-grid"></div>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="ch">Hourly Volume</div>
+      <div class="chart-body">
+        <div class="bars" id="vol-bars"></div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px">
+          <span style="font-size:8px;color:var(--muted)">6 AM</span>
+          <span style="font-size:8px;color:var(--muted)">12 PM</span>
+          <span style="font-size:8px;color:var(--muted)">6 PM</span>
+          <span style="font-size:8px;color:var(--muted)">Now</span>
+        </div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="ch">Vehicle Types</div>
+      <div class="chart-body">
+        <div class="donut-wrap">
+          <svg width="70" height="70" id="donut" viewBox="0 0 70 70"></svg>
+          <div class="donut-leg" id="donut-leg"></div>
+        </div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="ch">Speed Distribution</div>
+      <div class="chart-body" id="spd-dist"></div>
+    </div>
+  </div>
+
+  <!-- VIDEO ANALYTICS SECTION -->
+  <div class="upload-section">
+    <div class="tab-row">
+      <div class="tab active" onclick="switchTab('upload')">Video Analytics</div>
+      <div class="tab" onclick="switchTab('report')">Analysis Report</div>
+    </div>
+
+    <div id="tab-upload">
+      <div class="upload-area" id="drop-zone" onclick="document.getElementById('vid-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag')"
+           ondragleave="this.classList.remove('drag')"
+           ondrop="handleDrop(event)">
+        <input type="file" id="vid-input" class="upload-input" accept="video/*" onchange="startAnalysis(this.files[0])">
+        <div style="font-size:32px;color:var(--green);margin-bottom:8px">📹</div>
+        <div class="upload-title">Drop a traffic video here or click to upload</div>
+        <div class="upload-sub" style="margin-top:4px">Supports MP4, AVI, MOV — AI will detect vehicles, read plates & flag violations</div>
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <span style="font-size:10px;background:rgba(0,200,150,.1);border:1px solid var(--border2);border-radius:4px;padding:2px 8px;color:var(--green)">YOLOv8 Detection</span>
+          <span style="font-size:10px;background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.25);border-radius:4px;padding:2px 8px;color:var(--cyan)">DeepSORT Tracking</span>
+          <span style="font-size:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);border-radius:4px;padding:2px 8px;color:var(--amber)">ANPR / OCR</span>
+          <span style="font-size:10px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:4px;padding:2px 8px;color:var(--red)">Speed Violation Detection</span>
+        </div>
+      </div>
+      <div class="prog-wrap" id="prog-wrap">
+        <div class="prog-lbl">
+          <span id="prog-msg">Initialising AI pipeline…</span>
+          <span id="prog-pct">0%</span>
+        </div>
+        <div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <div id="tab-report" style="display:none">
+      <div style="padding:10px 12px 4px;font-size:11px;color:var(--muted)" id="report-filename">No analysis run yet. Upload a video first.</div>
+      <div class="report-grid" id="report-grid" style="display:none"></div>
+      <div class="anpr-result" id="anpr-result"></div>
+    </div>
+  </div>
+
+</div><!-- /left -->
+
+<!-- RIGHT PANEL -->
+<div class="right">
+
+  <div class="panel">
+    <div class="ph"><span class="ph-title">⚡ ANPR Live</span><span class="ph-count" id="anpr-count">0 reads</span></div>
+    <div class="anpr-header">
+      <span style="font-size:9px;color:var(--muted)">PLATE</span>
+      <span style="font-size:9px;color:var(--muted)">TYPE</span>
+      <span style="font-size:9px;color:var(--muted)">CONF</span>
+    </div>
+    <div class="anpr-list" id="anpr-list"></div>
+  </div>
+
+  <div class="panel">
+    <div class="ph"><span class="ph-title">🔔 Alerts</span><span class="ph-count" style="color:var(--red)" id="alert-count">0 active</span></div>
+    <div class="alert-list" id="alert-list"></div>
+  </div>
+
+  <div class="panel">
+    <div class="ph"><span class="ph-title">🧠 AI Insight</span></div>
+    <div class="insight-box">
+      <div class="insight-tag">Live Analysis</div>
+      <div id="insight-text">Analysing traffic patterns across all 6 camera zones…</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="ph"><span class="ph-title">📍 Watchlist</span><span class="ph-count">3 active plates</span></div>
+    <div style="padding:8px 12px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <span style="font-size:10px;padding:2px 8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:4px;color:var(--red);font-weight:700">MH12RED999</span>
+        <span style="font-size:10px;padding:2px 8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:4px;color:var(--red);font-weight:700">DL3CAB2022</span>
+        <span style="font-size:10px;padding:2px 8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:4px;color:var(--red);font-weight:700">KA51ZZ4321</span>
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:var(--muted)">System will auto-alert when any watchlisted vehicle is detected by any camera.</div>
+    </div>
+  </div>
+
+</div><!-- /right -->
+</div><!-- /layout -->
+
+<div class="footer">
+  AI Traffic Surveillance & Vehicle Analytics System &nbsp;·&nbsp; Built with Python · FastAPI · YOLOv8 · PaddleOCR · DeepSORT · PostgreSQL · Redis &nbsp;·&nbsp; Demo Mode
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// DATA & CONFIG
+// ═══════════════════════════════════════════════════════
+const CAMS=[
+  {id:'CAM-01',name:'Main Junction N',loc:'NH-48 North',col:'#00c896'},
+  {id:'CAM-02',name:'Highway Overpass',loc:'Ring Road E',col:'#22d3ee'},
+  {id:'CAM-03',name:'Market Sq Gate',loc:'City Centre',col:'#a855f7'},
+  {id:'CAM-04',name:'Industrial Zone',loc:'MIDC Road',col:'#f59e0b'},
+  {id:'CAM-05',name:'School Zone',loc:'Sector 7',col:'#3b82f6'},
+  {id:'CAM-06',name:'Airport Approach',loc:'SH-27',col:'#f97316'},
+];
+const TYPES=['Sedan','SUV','Truck','Motorcycle','Bus','Auto','Van','Hatchback'];
+const STATES=['MH','KA','DL','GJ','UP','TN','RJ','PB','MH','MH','MH'];
+const WATCHLIST=new Set(['MH12RED999','DL3CAB2022','KA51ZZ4321']);
+const HOURLY=[18,10,8,6,9,28,55,82,70,68,75,60,52,58,70,82,88,85,72,60,50,44,38,32];
+const INSIGHTS=[
+  'Peak congestion expected at Main Junction N between 17:30–19:00. Recommend adaptive signal timing.',
+  'Vehicle density at CAM-03 (Market Sq) is 34% above average. Possible nearby event detected.',
+  'ANPR accuracy steady at 98.2%. 3 watchlist alerts dispatched to control room this hour.',
+  'School Zone (CAM-05) traffic normalised post-peak. Pedestrian crossing compliance: 94%.',
+  'Industrial Zone truck-to-car ratio elevated. Heavy vehicle routing advisory activated.',
+  'Airport Approach (CAM-06) flow nominal. No congestion predicted for next 45 minutes.',
+];
+
+let totalAnpr=3847, totalViol=14, totalAlerts=3, activeCam=0;
+const camCounts=[72,48,91,35,28,63];
+const canvases=[], ctxs=[];
+const vehicleObjs=CAMS.map(()=>[]);
+let frameId;
+
+// ═══════════════════════════════════════════════════════
+// CAMERA RENDERING
+// ═══════════════════════════════════════════════════════
+function initCameras(){
+  const grid=document.getElementById('cam-grid');
+  grid.innerHTML='';
+  CAMS.forEach((cam,i)=>{
+    const card=document.createElement('div');
+    card.className='cam'+(i===0?' active':'');
+    card.innerHTML=`<div class="cam-view">
+      <canvas class="cam-canvas" id="cv${i}" width="260" height="108"></canvas>
+      <div class="cam-top">
+        <span class="cam-rec"><span class="cam-rdot"></span>LIVE</span>
+        <span class="cam-tag">${cam.id}</span>
+      </div>
+    </div>
+    <div class="cam-bot">
+      <div><div class="cam-name">${cam.name}</div><div class="cam-loc">${cam.loc}</div></div>
+      <div class="cam-cnt" id="cc${i}">${camCounts[i]} veh</div>
+    </div>`;
+    card.onclick=()=>{document.querySelectorAll('.cam').forEach(c=>c.classList.remove('active'));card.classList.add('active');activeCam=i;};
+    grid.appendChild(card);
+    canvases.push(document.getElementById('cv'+i));
+    ctxs.push(canvases[i].getContext('2d'));
+  });
+  CAMS.forEach((_,i)=>{
+    for(let j=0;j<3+Math.floor(Math.random()*4);j++) vehicleObjs[i].push(mkVeh(i));
+  });
+  renderLoop();
+}
+
+function mkVeh(ci){
+  const dir=Math.random()>.5?1:-1;
+  const lane=Math.floor(Math.random()*3);
+  return{
+    x:dir===1?-25:285, y:30+lane*26+Math.random()*8,
+    w:16+Math.random()*14, h:8+Math.random()*5,
+    spd:(1.2+Math.random()*2.5)*dir, col:CAMS[ci].col,
+    bbox:false, bboxT:0,
+  };
+}
+
+function drawRoad(ctx,w,h){
+  ctx.fillStyle='#060c14'; ctx.fillRect(0,0,w,h);
+  for(let l=0;l<3;l++){ctx.fillStyle='#0c1520';ctx.fillRect(0,22+l*26,w,20);}
+  ctx.strokeStyle='rgba(255,255,200,.08)'; ctx.setLineDash([7,7]); ctx.lineWidth=.8;
+  for(let l=0;l<2;l++){ctx.beginPath();ctx.moveTo(0,22+(l+1)*26);ctx.lineTo(w,22+(l+1)*26);ctx.stroke();}
+  ctx.setLineDash([]);
+  ctx.strokeStyle='rgba(0,200,150,.025)'; ctx.lineWidth=.5;
+  for(let x=0;x<w;x+=18){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
+}
+
+function drawVeh(ctx,v){
+  const left=v.spd<0;
+  ctx.fillStyle='rgba(0,0,0,.4)'; ctx.fillRect(v.x+2,v.y+v.h,v.w,3);
+  ctx.fillStyle='#0d1c2e'; ctx.fillRect(v.x,v.y,v.w,v.h);
+  ctx.fillStyle=v.col+'25'; ctx.fillRect(v.x,v.y,v.w,2);
+  ctx.fillStyle=left?'#ff4444':'#ffffaa';
+  ctx.fillRect(left?v.x:v.x+v.w-2, v.y+2, 2, v.h-4);
+  if(v.bbox){
+    ctx.strokeStyle=v.col; ctx.lineWidth=1; ctx.setLineDash([2,2]);
+    ctx.strokeRect(v.x-3,v.y-3,v.w+6,v.h+6);
+    ctx.setLineDash([]);
+    ctx.fillStyle=v.col; ctx.font='bold 7px monospace';
+    ctx.fillText('AI',v.x-3,v.y-5);
+  }
+}
+
+function renderLoop(){
+  CAMS.forEach((_,i)=>{
+    const c=canvases[i],ctx=ctxs[i],w=c.width,h=c.height;
+    drawRoad(ctx,w,h);
+    const scanY=(Date.now()/12)%h;
+    ctx.fillStyle='rgba(0,200,150,.025)'; ctx.fillRect(0,scanY,w,2);
+    vehicleObjs[i].forEach(v=>{
+      v.x+=v.spd;
+      if(v.bboxT>0){v.bbox=true;v.bboxT--;}else v.bbox=false;
+      if(v.x>w+30)v.x=-30; if(v.x<-30)v.x=w+30;
+      drawVeh(ctx,v);
+    });
+    ctx.fillStyle='rgba(0,200,150,.5)'; ctx.font='7px monospace';
+    ctx.fillText(CAMS[i].id+' '+new Date().toLocaleTimeString(),4,h-4);
+    if(i===activeCam){ctx.strokeStyle='rgba(0,200,150,.4)';ctx.lineWidth=1;ctx.strokeRect(.5,.5,w-1,h-1);}
+  });
+  frameId=requestAnimationFrame(renderLoop);
+}
+
+// ═══════════════════════════════════════════════════════
+// ANPR FEED
+// ═══════════════════════════════════════════════════════
+let anprLog=[];
+function genPlate(){
+  const s=STATES[Math.floor(Math.random()*STATES.length)];
+  const n=String(10+Math.floor(Math.random()*89));
+  const l='ABCDEFGHJKLMNPRSTUVWXYZ';
+  const a=l[Math.floor(Math.random()*l.length)]+l[Math.floor(Math.random()*l.length)];
+  return `${s}${n}${a}${1000+Math.floor(Math.random()*9000)}`;
+}
+function addAnpr(){
+  const plate=Math.random()<.06?[...WATCHLIST][Math.floor(Math.random()*3)]:genPlate();
+  const type=TYPES[Math.floor(Math.random()*TYPES.length)];
+  const conf=Math.round(86+Math.random()*13);
+  const isWL=WATCHLIST.has(plate);
+  const time=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  anprLog.unshift({plate,type,conf,isWL,time});
+  if(anprLog.length>18) anprLog.pop();
+  totalAnpr++;
+  const ci=Math.floor(Math.random()*6);
+  const vehs=vehicleObjs[ci];
+  if(vehs.length){const v=vehs[Math.floor(Math.random()*vehs.length)];v.bbox=true;v.bboxT=55;}
+  camCounts[ci]=Math.max(0,camCounts[ci]+Math.floor(Math.random()*3-1));
+  document.getElementById('cc'+ci).textContent=camCounts[ci]+' veh';
+  renderAnpr();
+  if(isWL){addAlert('danger','⛔',`Watchlist match: ${plate} — cam ${CAMS[ci].id}`);totalViol++;totalAlerts++;}
+}
+function renderAnpr(){
+  document.getElementById('anpr-count').textContent=totalAnpr.toLocaleString()+' reads';
+  document.getElementById('anpr-list').innerHTML=anprLog.map(r=>`
+    <div class="anpr-row">
+      <span class="plate${r.isWL?' alert':''}">${r.plate}</span>
+      <span class="vtype">${r.type}</span>
+      <span class="conf-mini">${r.conf}%</span>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════
+let alertLog=[];
+function addAlert(type,icon,msg){
+  const time=new Date().toLocaleTimeString();
+  alertLog.unshift({type,icon,msg,time});
+  if(alertLog.length>8) alertLog.pop();
+  document.getElementById('alert-count').textContent=totalAlerts+' active';
+  document.getElementById('alert-list').innerHTML=alertLog.map(a=>`
+    <div class="alert-item">
+      <div class="alert-ico ico-${a.type}">${a.icon}</div>
+      <div class="alert-msg">${a.msg}</div>
+      <div class="alert-time">${a.time}</div>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// CHARTS
+// ═══════════════════════════════════════════════════════
+function drawVolBars(){
+  const now=new Date().getHours();
+  const max=Math.max(...HOURLY);
+  document.getElementById('vol-bars').innerHTML=HOURLY.map((v,i)=>`
+    <div class="bar${i===now?' now':''}" style="height:${Math.round(v/max*100)}%" title="${6+i}:00 — ${v} veh/hr"></div>`).join('');
+}
+function drawDonut(){
+  const data=[
+    {l:'Sedan/Car',p:42,c:'#00c896'},{l:'SUV',p:22,c:'#22d3ee'},
+    {l:'Truck',p:15,c:'#f59e0b'},{l:'Moto',p:12,c:'#a855f7'},{l:'Other',p:9,c:'#64748b'},
+  ];
+  const cx=35,cy=35,r=28,ri=18;let sa=-Math.PI/2,paths='';
+  data.forEach(d=>{
+    const ang=(d.p/100)*Math.PI*2;
+    const x1=cx+r*Math.cos(sa),y1=cy+r*Math.sin(sa);
+    const x2=cx+r*Math.cos(sa+ang),y2=cy+r*Math.sin(sa+ang);
+    const xi1=cx+ri*Math.cos(sa),yi1=cy+ri*Math.sin(sa);
+    const xi2=cx+ri*Math.cos(sa+ang),yi2=cy+ri*Math.sin(sa+ang);
+    const lg=ang>Math.PI?1:0;
+    paths+=`<path d="M${xi1},${yi1}L${x1},${y1}A${r},${r} 0 ${lg} 1 ${x2},${y2}L${xi2},${yi2}A${ri},${ri} 0 ${lg} 0 ${xi1},${yi1}" fill="${d.c}" opacity=".85"/>`;
+    sa+=ang;
+  });
+  document.getElementById('donut').innerHTML=`<circle cx="${cx}" cy="${cy}" r="${ri}" fill="#0a0e14"/>${paths}`;
+  document.getElementById('donut-leg').innerHTML=data.map(d=>`
+    <div class="leg-row">
+      <div class="leg-dot" style="background:${d.c}"></div>
+      <span class="leg-lbl">${d.l}</span>
+      <span class="leg-pct">${d.p}%</span>
+    </div>`).join('');
+}
+function drawSpeed(){
+  const bands=[
+    {l:'0–30',v:8,c:'#00c896'},{l:'30–60',v:45,c:'#22d3ee'},
+    {l:'60–80',v:32,c:'#f59e0b'},{l:'80–100',v:12,c:'#f97316'},{l:'>100',v:3,c:'#ef4444'},
+  ];
+  document.getElementById('spd-dist').innerHTML=bands.map(b=>`
+    <div class="spd-row">
+      <span class="spd-lbl">${b.l} km/h</span>
+      <div class="spd-track"><div class="spd-fill" style="width:${b.v}%;background:${b.c}"></div></div>
+      <span class="spd-num">${b.v}%</span>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// HEADER TICKER
+// ═══════════════════════════════════════════════════════
+let baseVeh=8421;
+function tickHeader(){
+  baseVeh+=Math.floor(Math.random()*3);
+  document.getElementById('hv1').textContent=baseVeh.toLocaleString();
+  document.getElementById('hv2').textContent=Math.round(50+Math.random()*16);
+  document.getElementById('hv3').textContent=totalViol;
+  document.getElementById('s1').textContent=Math.round(340+Math.random()*60);
+  document.getElementById('s2').textContent=totalAnpr.toLocaleString();
+  document.getElementById('s3').textContent=totalViol;
+}
+
+// ═══════════════════════════════════════════════════════
+// AI INSIGHT ROTATOR
+// ═══════════════════════════════════════════════════════
+let iIdx=0;
+function rotateInsight(){
+  document.getElementById('insight-text').textContent=INSIGHTS[iIdx%INSIGHTS.length];
+  iIdx++;
+}
+
+// ═══════════════════════════════════════════════════════
+// VIDEO ANALYTICS (SIMULATED)
+// ═══════════════════════════════════════════════════════
+function switchTab(tab){
+  document.getElementById('tab-upload').style.display=tab==='upload'?'block':'none';
+  document.getElementById('tab-report').style.display=tab==='report'?'block':'none';
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',(tab==='upload'&&i===0)||(tab==='report'&&i===1)));
+}
+function handleDrop(e){
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  const f=e.dataTransfer.files[0];
+  if(f&&f.type.startsWith('video/')) startAnalysis(f);
+}
+function startAnalysis(file){
+  if(!file)return;
+  document.getElementById('drop-zone').style.display='none';
+  const pw=document.getElementById('prog-wrap');
+  pw.style.display='block';
+  const steps=[
+    [5,'Loading video file…'],
+    [15,'Extracting frames…'],
+    [28,'Initialising YOLOv8 detector…'],
+    [40,'Running vehicle detection…'],
+    [55,'DeepSORT tracking vehicles…'],
+    [68,'Running ANPR / OCR engine…'],
+    [80,'Estimating vehicle speeds…'],
+    [90,'Detecting violations…'],
+    [96,'Generating heatmap…'],
+    [100,'Analysis complete!'],
+  ];
+  let idx=0;
+  const iv=setInterval(()=>{
+    if(idx>=steps.length){clearInterval(iv);showReport(file.name);return;}
+    const[pct,msg]=steps[idx++];
+    document.getElementById('prog-fill').style.width=pct+'%';
+    document.getElementById('prog-msg').textContent=msg;
+    document.getElementById('prog-pct').textContent=pct+'%';
+  },600);
+}
+
+const MOCK_PLATES=[
+  {plate:'MH12AB3456',type:'Sedan',conf:.97,wl:false},
+  {plate:'KA51ZZ4321',type:'SUV',conf:.94,wl:true},
+  {plate:'MH14CD5678',type:'Truck',conf:.91,wl:false},
+  {plate:'DL3CAB2022',type:'Bus',conf:.88,wl:true},
+  {plate:'GJ05KK3311',type:'Motorcycle',conf:.96,wl:false},
+  {plate:'TN09ST8822',type:'Auto',conf:.89,wl:false},
+  {plate:'MH20JK1122',type:'Sedan',conf:.95,wl:false},
+  {plate:'UP80ZZ5566',type:'SUV',conf:.93,wl:false},
+];
+function showReport(fname){
+  switchTab('report');
+  document.getElementById('report-filename').textContent='Analysis complete: '+fname;
+  const rg=document.getElementById('report-grid');
+  rg.style.display='grid';
+  const dur=Math.round(30+Math.random()*90);
+  rg.innerHTML=[
+    {v:Math.round(40+Math.random()*30),l:'Unique Vehicles'},
+    {v:Math.round(30+Math.random()*20),l:'ANPR Reads'},
+    {v:Math.round(45+Math.random()*20),l:'Avg Speed km/h'},
+    {v:Math.round(Math.random()*8),l:'Speed Violations'},
+    {v:dur+'s',l:'Video Duration'},
+    {v:Math.round(2+Math.random()*3),l:'Watchlist Hits'},
+  ].map(x=>`<div class="report-card"><div class="rc-val">${x.v}</div><div class="rc-lbl">${x.l}</div></div>`).join('');
+  const ar=document.getElementById('anpr-result');
+  ar.style.display='block';
+  ar.innerHTML='<div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">ANPR Reads from Video</div>'+
+    MOCK_PLATES.map(p=>`<div class="ar-row">
+      <span class="ar-plate">${p.plate}</span>
+      <span class="ar-type">${p.type} · ${Math.round(p.conf*100)}%</span>
+      ${p.wl?'<span class="ar-badge">WATCHLIST</span>':'<span style="font-size:9px;color:var(--green)">✓ Clear</span>'}
+    </div>`).join('');
+  document.getElementById('drop-zone').style.display='block';
+  document.getElementById('prog-wrap').style.display='none';
+  document.getElementById('prog-fill').style.width='0%';
+}
+
+// ═══════════════════════════════════════════════════════
+// SEED & BOOT
+// ═══════════════════════════════════════════════════════
+const SEED_ALERTS=[
+  ['warn','⚠','Speed: MH12XY9900 at 91 km/h — CAM-02'],
+  ['danger','⛔','Watchlist: MH12RED999 — CAM-03'],
+  ['info','📍','High density: Main Junction N'],
+];
+SEED_ALERTS.forEach(a=>addAlert(a[0],a[1],a[2]));
+for(let i=0;i<7;i++) anprLog.push({
+  plate:genPlate(),type:TYPES[Math.floor(Math.random()*TYPES.length)],
+  conf:Math.round(86+Math.random()*13),isWL:false,
+  time:new Date(Date.now()-Math.random()*60000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})
+});
+renderAnpr();
+initCameras();
+drawVolBars();
+drawDonut();
+drawSpeed();
+rotateInsight();
+
+setInterval(addAnpr,2200);
+setInterval(tickHeader,3000);
+setInterval(rotateInsight,8000);
+setInterval(()=>{
+  if(Math.random()<.35){
+    const msgs=[
+      ['warn','⚠',`Speed violation — ${Math.round(80+Math.random()*40)} km/h — ${CAMS[Math.floor(Math.random()*6)].id}`],
+      ['info','📍',`Congestion forming — ${CAMS[Math.floor(Math.random()*6)].name}`],
+      ['warn','⚠',`Wrong lane detected — ${CAMS[Math.floor(Math.random()*6)].id}`],
+    ];
+    const m=msgs[Math.floor(Math.random()*msgs.length)];
+    addAlert(m[0],m[1],m[2]);
+    totalAlerts++;
+    if(m[0]==='warn') totalViol++;
+  }
+},5000);
+async function loadBackendData() {
+
+    try {
+
+        const response = await fetch(
+            "http://127.0.0.1:8000/health"
+        );
+
+        const data = await response.json();
+
+        console.log("Backend Connected:", data);
+
+    } catch (error) {
+
+        console.error("Backend Error:", error);
+
+    }
+}
+
+loadBackendData();
+</script>
+
+</body>
+</html>

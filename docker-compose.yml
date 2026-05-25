@@ -1,0 +1,108 @@
+version: "3.9"
+
+# ════════════════════════════════════════════════════════════════
+#  AI Traffic Surveillance System — Docker Compose
+#  Run:  docker compose up --build
+# ════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── PostgreSQL + TimescaleDB ──────────────────────────────────
+  db:
+    image: timescale/timescaledb:latest-pg15
+    container_name: traffic_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     traffic_user
+      POSTGRES_PASSWORD: traffic_pass
+      POSTGRES_DB:       traffic_db
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U traffic_user -d traffic_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ─────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: traffic_redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── FastAPI backend ───────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: traffic_backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL:      postgresql+asyncpg://traffic_user:traffic_pass@db:5432/traffic_db
+      DATABASE_URL_SYNC: postgresql://traffic_user:traffic_pass@db:5432/traffic_db
+      REDIS_URL:         redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+    volumes:
+      - ./backend:/app
+      - model_cache:/app/models
+      - video_outputs:/app/data/video_outputs
+      - ./backend/data:/app/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── Celery worker (background tasks) ──────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: traffic_worker
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL:      postgresql+asyncpg://traffic_user:traffic_pass@db:5432/traffic_db
+      REDIS_URL:         redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+    volumes:
+      - ./backend:/app
+      - model_cache:/app/models
+      - video_outputs:/app/data/video_outputs
+    depends_on:
+      - backend
+      - redis
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+
+  # ── Nginx reverse proxy ───────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: traffic_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+
+volumes:
+  pg_data:
+  model_cache:
+  video_outputs:
